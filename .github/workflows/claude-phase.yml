@@ -7,22 +7,41 @@ on:
         required: false
   schedule:
     - cron: '0 6 * * *' # 09:00 Asia/Riyadh (UTC+3)
+
 permissions:
   contents: write
   pull-requests: write
+
 concurrency:
   group: claude-phase
   cancel-in-progress: false
+
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with: { fetch-depth: 0 }
+        with:
+          fetch-depth: 0
+
       - uses: actions/setup-node@v4
-        with: { node-version: '20' }
+        with:
+          node-version: '20'
+
+      - name: Validate setup
+        run: |
+          echo "Repo: $GITHUB_REPOSITORY"
+          echo "Branch: $GITHUB_REF_NAME"
+          if [ -z "${{ secrets.ANTHROPIC_API_KEY }}" ] && [ -z "${{ secrets.OPENROUTER_API_KEY }}" ]; then
+            echo "❌ Missing both ANTHROPIC_API_KEY and OPENROUTER_API_KEY"; exit 1; fi
+          test -f scripts/claude_phase.mjs || (echo "❌ scripts/claude_phase.mjs missing" && exit 1)
+          test -f prompts/system.md || (echo "❌ prompts/system.md missing" && exit 1)
+          test -f prompts/phase-1.md || (echo "❌ prompts/phase-1.md missing" && exit 1)
+          test -f state/current_phase.txt || (echo "❌ state/current_phase.txt missing" && exit 1)
+
       - name: Run Claude Phase
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
           FORCE_PHASE: ${{ inputs.forcePhase }}
         run: node scripts/claude_phase.mjs

@@ -1,11 +1,16 @@
-// Node 20+ script to call Anthropic Claude API and write files/commit/push.
+// Node 20+ script that supports Anthropic or OpenRouter providers.
+// It reads either ANTHROPIC_API_KEY or OPENROUTER_API_KEY and calls the right API.
+// It expects the model to return pure JSON per the contract in the prompt.
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { execSync } from 'node:child_process';
 
-const API_KEY = process.env.ANTHROPIC_API_KEY;
-if (!API_KEY) {
-  console.error('❌ Missing ANTHROPIC_API_KEY secret');
+const ANTHROPIC_KEY = process.env.ANTHROPIC_API_KEY || '';
+const OPENROUTER_KEY = process.env.OPENROUTER_API_KEY || '';
+const PROVIDER = ANTHROPIC_KEY ? 'anthropic' : (OPENROUTER_KEY ? 'openrouter' : '');
+
+if (!PROVIDER) {
+  console.error('❌ Missing both ANTHROPIC_API_KEY and OPENROUTER_API_KEY');
   process.exit(1);
 }
 
@@ -23,7 +28,7 @@ async function getPhase(){
   } catch { return 1; }
 }
 
-async function callClaude(system, user){
+async function callWithAnthropic(system, user) {
   const body = {
     model: 'claude-3-5-sonnet-latest',
     max_tokens: 8000,
@@ -35,23 +40,62 @@ async function callClaude(system, user){
     method: 'POST',
     headers: {
       'content-type': 'application/json',
-      'x-api-key': API_KEY,
+      'x-api-key': ANTHROPIC_KEY,
       'anthropic-version': '2023-06-01',
     },
     body: JSON.stringify(body),
   });
   if (!res.ok){
     const t = await res.text();
-    throw new Error(`Claude API error ${res.status}: ${t}`);
+    throw new Error(`Anthropic API error ${res.status}: ${t}`);
   }
   const data = await res.json();
   let text = (data.content || []).map(c => c.text || '').join('').trim();
+  return text;
+}
+
+async function callWithOpenRouter(system, user) {
+  const body = {
+    model: 'anthropic/claude-3.5-sonnet',
+    temperature: 0.2,
+    max_tokens: 8000,
+    messages: [
+      { role: 'system', content: system },
+      { role: 'user', content: user },
+    ],
+  };
+  const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      'authorization': `Bearer ${OPENROUTER_KEY}`,
+      'accept': 'application/json',
+    },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok){
+    const t = await res.text();
+    throw new Error(`OpenRouter API error ${res.status}: ${t}`);
+  }
+  const data = await res.json();
+  let content = data?.choices?.[0]?.message?.content ?? '';
+  if (Array.isArray(content)) {
+    content = content.map(p => (typeof p === 'string' ? p : p?.text || '')).join('');
+  }
+  if (typeof content !== 'string') content = String(content ?? '');
+  return content.trim();
+}
+
+async function callClaude(system, user){
+  const raw = PROVIDER === 'anthropic' ? await callWithAnthropic(system, user)
+                                       : await callWithOpenRouter(system, user);
+  let text = raw;
   if (text.startsWith('```')){
     text = text.replace(/^```json/i, '').replace(/^```/i, '').replace(/```$/i, '').trim();
   }
   let out;
   try { out = JSON.parse(text); }
-  catch (e){ throw new Error('Claude did not return valid JSON.\n' + text); }
+  catch (e){ throw new Error('Model did not return valid JSON.\n' + text); }
   return out;
 }
 
@@ -95,7 +139,7 @@ async function gitCommitAndPush(message){
 - لا تستخدم أسوار كود أو Markdown.
 - لا تقسّم الرد إلى أجزاء.`;
 
-  const user = `PHASE #${phase}\n\n${phasePrompt}\n\n${outputContract}`;
+  const user = `PROVIDER=${PROVIDER}\nPHASE #${phase}\n\n${phasePrompt}\n\n${outputContract}`;
   const result = await callClaude(system, user);
 
   if (!result.files || !Array.isArray(result.files)){
@@ -112,7 +156,7 @@ async function gitCommitAndPush(message){
     await gitCommitAndPush(`advance to phase ${next}`);
   }
 
-  console.log(`🎯 Done Phase ${phase}`);
+  console.log(`🎯 Done Phase ${phase} via ${PROVIDER}`);
 })().catch(err => {
   console.error('❌', err.message);
   process.exit(1);

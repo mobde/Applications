@@ -1,19 +1,18 @@
-# TahfeezSuite — Auto Phases via Claude + GitHub Actions
+# TahfeezSuite — Auto Phases via GitHub Actions
 
-## إعداد السر
-- Settings → Secrets and variables → Actions → **New repository secret**
-- Name: `ANTHROPIC_API_KEY`
-- Value: مفتاح Claude
-
-## صلاحيات الوركفلو
-- Settings → Actions → General → **Workflow permissions: Read and write permissions**
-
-## التشغيل
-- يدويًا: تبويب **Actions** → Workflow: *Claude Phase Builder* → **Run workflow** (يمكن تمرير `forcePhase`).
-- مجدول: يوميًا 09:00 بتوقيت الرياض.
+هذا المستودع مهيّأ لبناء المشروع على مراحل تلقائيًا عبر GitHub Actions.
+عند تشغيل الوركفلو، سيولّد ملفات المرحلة الحالية ويضيفها كـ commit جديد.
 
 ## كيف يعمل؟
-- يقرأ `prompts/system.md` و`prompts/phase-N.md`.
-- يطلب من Claude إخراج JSON فيه ملفات لتُنشأ/تُحدّث.
-- يكتب الملفات ويعمل commit/push.
-- إذا `nextPhaseReady=true` يرفع رقم المرحلة في `state/current_phase.txt`.
+- ملفات المرحلة موجودة في: `prompts/phase-N.md` وملف نظام عام في `prompts/system.md`.
+- رقم المرحلة الحالية يُقرأ من: `state/current_phase.txt` (ابدأ بـ `1`).
+- سكربت التنفيذ: `scripts/claude_phase.mjs`.
+- الوركفلو: `.github/workflows/claude-phase.yml`.
+
+## التشغيل
+1) افتح تبويب **Actions** في هذا المستودع.
+2) اختر **Claude Phase Builder** ثم **Run workflow**.
+3) (اختياري) أدخل قيمة `forcePhase` لتشغيل مرحلة بعينها.
+4) بعد نجاح التنفيذ، ستجد commit جديد يحتوي ملفات المرحلة.
+
+## هيكلة المستودع

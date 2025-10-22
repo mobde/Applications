@@ -1,6 +1,6 @@
 name: Claude Phase Builder
-on:
-  workflow_dispatch:
+# on:
+  # workflow_dispatch:
     inputs:
       forcePhase:
         description: 'Phase number (optional override)'
